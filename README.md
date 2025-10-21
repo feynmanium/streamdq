@@ -237,11 +237,24 @@ mvn clean install
 
 ## Running Examples
 
+### Basic Examples
 ```bash
 cd examples
 mvn exec:java -Dexec.mainClass="com.streamdq.examples.BasicUsageExample"
 mvn exec:java -Dexec.mainClass="com.streamdq.examples.WindowedChecksExample"
 mvn exec:java -Dexec.mainClass="com.streamdq.examples.AnomalyDetectionExample"
+```
+
+### Advanced Streaming Examples
+```bash
+# Event time, watermarks, and late data
+mvn exec:java -Dexec.mainClass="com.streamdq.examples.EventTimeExample"
+
+# Real-time alerting
+mvn exec:java -Dexec.mainClass="com.streamdq.examples.RealTimeAlertingExample"
+
+# Dead letter queue pattern
+mvn exec:java -Dexec.mainClass="com.streamdq.examples.DeadLetterQueueExample"
 ```
 
 ## Requirements
@@ -250,14 +263,95 @@ mvn exec:java -Dexec.mainClass="com.streamdq.examples.AnomalyDetectionExample"
 - Apache Flink 1.18+
 - Maven 3.6+
 
+## Streaming-Specific Features
+
+StreamDQ goes beyond Deequ by implementing streaming-first data quality features:
+
+### Event Time & Watermarks
+```java
+WatermarkStrategy<Event> watermarkStrategy = WatermarkStrategy
+    .<Event>forBoundedOutOfOrderness(Duration.ofSeconds(5))
+    .withTimestampAssigner((event, ts) -> event.eventTime);
+
+events.assignTimestampsAndWatermarks(watermarkStrategy);
+```
+
+### Timeliness Checks
+```java
+// Ensure events processed within 30 seconds
+TimelinessCheck.maxLatency(
+    "payment_timeliness",
+    payment -> payment.getEventTime(),
+    Duration.ofSeconds(30)
+);
+```
+
+### Late Data Handling
+```java
+OutputTag<Event> lateDataTag = new OutputTag<>("late-events") {};
+
+windowedStream
+    .allowedLateness(Time.seconds(30))
+    .sideOutputLateData(lateDataTag)
+    .aggregate(...);
+
+// Access late data
+stream.getSideOutput(lateDataTag);
+```
+
+### State TTL
+```java
+// Prevent unbounded state growth
+StateTTLConfig ttlConfig = StateTTLConfig.Presets.oneDay();
+```
+
+### Real-Time Alerting
+```java
+List<AlertSink> sinks = List.of(
+    new SlackAlertSink(webhookUrl),
+    new PagerDutyAlertSink(apiKey)
+);
+
+results.process(new AlertingFunction(
+    sinks,
+    AlertSeverity.WARNING,
+    false
+));
+```
+
+### Dead Letter Queue
+```java
+// Route invalid data without blocking pipeline
+OutputTag<DataWithCheckResult<Event>> dlqTag = new OutputTag<>("dlq") {};
+
+validEvents.process(new DeadLetterQueue<>(dlqTag, DLQStrategy.ROUTE_ERRORS));
+
+// Invalid data goes to DLQ
+validEvents.getSideOutput(dlqTag).addSink(dlqSink);
+```
+
+**See [STREAMING_FEATURES.md](STREAMING_FEATURES.md) for detailed documentation.**
+
 ## Roadmap
 
+### Completed ✅
+- [x] Event time and watermark support
+- [x] Late data handling with allowed lateness
+- [x] State TTL configuration
+- [x] Real-time alerting framework
+- [x] Timeliness checks
+- [x] Dead letter queue pattern
+- [x] Multi-way quality routing
+
+### Planned 🚀
+- [ ] Session window support
 - [ ] Table API integration for SQL-based checks
 - [ ] Uniqueness checks with probabilistic data structures (HyperLogLog)
 - [ ] Integration with Apache Iceberg for lakehouse validation
 - [ ] Constraint suggestion engine (analyze data, suggest constraints)
 - [ ] PyFlink bindings
 - [ ] Web UI for monitoring data quality
+- [ ] Savepoint-compatible state schema evolution
 
 ## Contributing
 
