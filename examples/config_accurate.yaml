@@ -1,0 +1,26 @@
+# VTKE Configuration: Accurate Preset
+# Best for: Production documentation, important recordings
+# Trade-off: Slower processing, highest quality
+
+video:
+  extraction_fps: 6.0
+  sharpness_min: 40.0
+  min_text_length: 50
+  jaccard_k: 20
+  overlap_threshold: 0.65
+  min_unique_lines: 2
+  save_frames: false
+  ocr_engine: "tesseract"
+  language_hint: "eng"
+  max_frames: null
+  blackframe_threshold: 20.0
+
+assets:
+  mode: "detect"
+  dry_run: true
+
+mdx:
+  include_lang: []
+  exclude_lang: []
+  min_block_lines: 2
+  max_block_chars: 100000
