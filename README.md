@@ -18,11 +18,20 @@ AWS Deequ is the de-facto standard for data quality on Apache Spark, but there's
 
 ### Core Data Quality Checks
 
+**Per-Record Validation:**
 - **Completeness Checks**: Validate non-null values, similar to Deequ's completeness constraint
 - **Pattern Checks**: Regex validation for emails, UUIDs, phone numbers, custom patterns
 - **Range Checks**: Ensure numeric values fall within expected bounds
 - **Custom Checks**: Define your own validation logic
-- **Windowed Aggregations**: Check data quality over time windows, not just individual records
+
+**Windowed Aggregated Checks (Streaming-Native):**
+- **Uniqueness**: Window-based deduplication and duplicate detection
+- **Cardinality**: Distinct count tracking with bounds
+- **Pattern Conformance Rate**: % of values matching patterns over windows
+- **Null Rate**: Percentage of null values over windows
+- **Distribution Analysis**: Value frequency tracking and skew detection
+- **String Length**: Text length validation with violation rates
+- **Statistical Profiling**: Min, max, mean, stddev over windows
 
 ### Streaming-Specific Features
 
@@ -87,20 +96,54 @@ results.filter(r -> !r.isSuccess())
     .print();
 ```
 
-### Windowed Checks
+### Windowed Aggregated Checks
+
+StreamDQ provides comprehensive **windowed aggregated DQ checks** - the fundamental difference between streaming and batch validation:
 
 ```java
 import com.streamdq.window.*;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 
-// Check that 95% of records in each 1-minute window have non-null temperature
+// 1. Completeness Rate - track % non-null over windows
 WindowedCompletenessCheck
-    .<SensorReading, ?>on("temperature", s -> s.temperature, 0.95)
-    .apply(sensorData
-        .keyBy(s -> s.sensorId)
-        .window(TumblingProcessingTimeWindows.of(Time.minutes(1))))
-    .print();
+    .<Order, ?>on("email", o -> o.email, 0.95)
+    .apply(orders.window(TumblingProcessingTimeWindows.of(Time.minutes(5))));
+
+// 2. Uniqueness - detect duplicates within windows
+WindowedUniquenessCheck
+    .<Order, ?>expectUnique("orderId", o -> o.orderId)
+    .apply(orders.window(TumblingProcessingTimeWindows.of(Time.hours(1))));
+
+// 3. Cardinality - track distinct count with bounds
+WindowedCardinalityCheck
+    .<Order, ?>between("customerId", o -> o.customerId, 100L, 10000L)
+    .apply(orders.window(TumblingProcessingTimeWindows.of(Time.minutes(15))));
+
+// 4. Pattern Conformance Rate - % matching patterns
+WindowedPatternConformanceCheck
+    .<Order, ?>email("email", o -> o.email, 0.95)
+    .apply(orders.window(TumblingProcessingTimeWindows.of(Time.minutes(5))));
+
+// 5. Null Rate - monitor null percentage
+WindowedNullRateCheck
+    .<Order, ?>on("customerId", o -> o.customerId, 0.05) // Max 5% nulls
+    .apply(orders.window(TumblingProcessingTimeWindows.of(Time.minutes(5))));
+
+// 6. Distribution - value frequency tracking
+WindowedDistributionCheck
+    .<Order, ?>maxFrequency("status", o -> o.status, 0.70) // No value > 70%
+    .apply(orders.window(TumblingProcessingTimeWindows.of(Time.minutes(10))));
+
+// 7. String Length - text validation
+WindowedStringLengthCheck
+    .<Order, ?>between("sku", o -> o.sku, 8, 12, 0.05) // 95% in range
+    .apply(orders.window(TumblingProcessingTimeWindows.of(Time.minutes(5))));
+
+// 8. Range - numeric bounds with violation rate
+WindowedRangeCheck
+    .<Order, ?>on("amount", o -> o.amount, 0.0, 10000.0, 0.05)
+    .apply(orders.window(TumblingProcessingTimeWindows.of(Time.minutes(5))));
 ```
 
 ### Data Profiling
@@ -247,6 +290,9 @@ mvn exec:java -Dexec.mainClass="com.streamdq.examples.AnomalyDetectionExample"
 
 ### Advanced Streaming Examples
 ```bash
+# Comprehensive windowed aggregated checks (NEW!)
+mvn exec:java -Dexec.mainClass="com.streamdq.examples.ComprehensiveWindowedChecksExample"
+
 # Event time, watermarks, and late data
 mvn exec:java -Dexec.mainClass="com.streamdq.examples.EventTimeExample"
 
